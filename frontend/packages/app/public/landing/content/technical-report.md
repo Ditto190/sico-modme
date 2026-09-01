@@ -781,7 +781,9 @@ The diagram shows the intended two-path architecture. In the current implementat
 
 **Playbook**: A collection of **Bullets** (strategy entries) organized by section. Each Bullet tracks helpfulness counts, vector embeddings (for deduplication), and active/invalid status. Playbooks serialize to three formats: **JSON** (full state with embeddings and timestamps for persistence), **TOON** (tab-delimited compact encoding for direct LLM prompt injection), and **Markdown** (one `<section>.md` file per section, written into the agent workspace for the agent to read and Operators to audit).
 
-**Deduplication**: Unchecked duplication in the Playbook would waste prompt tokens, introduce conflicting guidance, and hurt auditability. Experience Learning adds an embedding-based second line of defense: vector-embed all Bullets, flag pairs above a cosine similarity threshold (default 0.85), and ask the Curator to emit consolidation ops (`MERGE` / `DELETE` / `KEEP` / `UPDATE`); `KEEP` decisions are persisted so the same pairs are not re-evaluated. This runs as an offline maintenance pass, not on the critical path of every execution.
+**Retriever**: For each delegated `TaskSpec`, `PlaybookRetriever` selects a focused subset of active Bullets from the Playbook. Selection is guided first by task relevance, using embedding similarity when available and BM25 as a fallback, and then refined by prior usefulness. The selected Bullets are appended to task instructions, helping keep the experience context relevant as the Playbook grows.
+
+**Deduplication**: Unchecked duplication in the Playbook would waste prompt tokens, introduce conflicting guidance, and hurt auditability. Experience Learning adds an embedding-based second line of defense: it computes embeddings for active Bullets, flags within-section pairs whose cosine similarity meets the configured threshold (default `0.84`), and asks the Curator to emit consolidation operations (`MERGE` / `DROP` / `KEEP` / `PATCH`). `KEEP` decisions are persisted so the same pairs are not evaluated again.
 
 #### 5.1.3 Dual Feedback Paths
 
@@ -791,7 +793,7 @@ Learned strategies feed back into agent execution through two paths:
 
 EPE decouples learning from the live chat path with a write-after / read-before pattern:
 
-- **Write (post-chat, fire-and-forget).** When a chat session completes, `ChatService` schedules `_try_experience_playbook_ingestion` as a background task: it loads the turn's `conversation.json`, converts it to `TrajectoryData`, and runs the full Reflector → Curator → persist pipeline via `add_playbook()`. A `PLAYBOOK_INGESTION` message is emitted into the conversation so Operators can see that learning happened. Because it runs off the response path, slow LLM calls or persistence failures never block the chat reply.
+- **Write (post-run, fire-and-forget).** Immediately after a delegated skill run produces its terminal result, the capability executor calls `on_run_terminal(run, result)` inline. The trigger uses the parser registered for that skill to build `TrajectoryData`, filters out trajectories without meaningful evidence, and schedules the full Reflector → Curator → persist pipeline through `add_playbook()`. `EPE_TRIGGER_MODE` controls whether dispatch happens after each run (`per_run`, the default), after the scheduling batch settles (`per_batch`), or not at all (`disabled`). The store round-trip and LLM-backed curation remain background work, so they do not block the task execution.
 - **Read (pre-chat snapshot).** Before the next session starts, `workspace_init` snapshots the current Playbook into the workspace as one Markdown file per section under `playbooks/`. The system prompt instructs the agent to read these files before acting and to re-read them when steps fail.
 
 The two halves are intentionally asynchronous: the snapshot is taken once at session start, so EPE writes that land **during** a session do not affect the running agent: they take effect on the next session.
@@ -818,7 +820,7 @@ This framework draws on recent work on evolving agent contexts, including ACE (Z
 
 The experience learning system is not limited to Sico's built-in chat agent. Any agentic system can use it through the integration pattern:
 
-1. **Inject**: Format the Playbook as context for the external agent using `wrap_experience_for_agent()`.
+1. **Inject**: Retrieve and rank the Playbook Bullets relevant to the external agent's task, then pass the selected hints to `wrap_experience_for_agent()` to append the experience block to the task instructions.
 2. **Execute**: The external agent runs its task normally.
 3. **Learn**: Convert the execution results into a `TrajectoryData` and call `ExperienceRunner.learn_from_trajectory()`.
 
