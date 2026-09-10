@@ -29,7 +29,7 @@
     "@sico/ui": "workspace:*",
     "@tanstack/react-query": "^5.100.9",
     "@tanstack/react-router": "^1.169.2",
-    "axios": "^1.16.0",
+    "axios": "^1.18.0",
     "immer": "^11.1.8",
     "jotai": "^2.20.0",
     "lucide-react": "^1.11.0",
@@ -48,7 +48,7 @@
     "@testing-library/user-event": "^14.6.1",
     "eslint-plugin-react-refresh": "^0.4.19",
     "msw": "^2.14.6",
-    "pdfjs-dist": "^6.0.227",
+    "pdfjs-dist": "^6.2.108",
     "prettier": "^3.9.5",
     "vite-plugin-static-copy": "^4.1.1"
   }
