@@ -598,8 +598,9 @@ describe("MessageList", () => {
       screen.getByText(formatDateTime(firstVisibleTime)).parentElement,
     ).not.toHaveTextContent("Scheduled task");
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
-    expect(get.mock.calls.map(([, config]) => config?.params?.page)).toEqual([
-      1, 2,
+    expect(get.mock.calls.map(([, config]) => config?.params)).toEqual([
+      expect.objectContaining({ page: 1 }),
+      expect.objectContaining({ page: 2 }),
     ]);
   });
 
